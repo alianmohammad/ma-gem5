@@ -269,6 +269,8 @@ def addCommonOptions(parser):
     parser.add_option("--ethernet-linkdelay", default="10us",
                       action="store", type="string",
                       help="Link delay in seconds\nDEFAULT: 10us")
+    parser.add_option("--multi-nic", action="store_true",
+                      help="Do we have multiple NICs?")
 
     # Run duration options
     parser.add_option("-I", "--maxinsts", action="store", type="int",

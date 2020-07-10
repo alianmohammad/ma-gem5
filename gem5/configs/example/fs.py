@@ -103,6 +103,7 @@ def build_test_system(np):
             security=options.enable_security_extensions,
             vio_9p=options.vio_9p,
             bootloader=options.bootloader,
+            multi_nic=options.multi_nic
         )
         if options.enable_context_switch_stats_dump:
             test_sys.enable_context_switch_stats_dump = True
@@ -351,7 +352,8 @@ elif len(bm) == 1 and options.dist:
                         options.dist_sync_start,
                         options.ethernet_linkspeed,
                         options.ethernet_linkdelay,
-                        options.etherdump);
+                        options.etherdump,
+                        options.multi_nic);
 elif len(bm) == 1:
     root = Root(full_system=True, system=test_sys)
 else:

@@ -183,7 +183,7 @@ def makeSparcSystem(mem_mode, mdesc=None, cmdline=None):
 def makeArmSystem(mem_mode, machine_type, num_cpus=1, mdesc=None,
                   dtb_filename=None, bare_metal=False, cmdline=None,
                   external_memory="", ruby=False, security=False,
-                  vio_9p=None, bootloader=None):
+                  vio_9p=None, bootloader=None, multi_nic=False):
     assert machine_type
 
     pci_devices = []
@@ -226,6 +226,15 @@ def makeArmSystem(mem_mode, machine_type, num_cpus=1, mdesc=None,
     else:
         self.pci_ide = IdeController(disks=disks)
         pci_devices.append(self.pci_ide)
+
+    self.realview.ethernet = IGbE_igb()
+    pci_devices.append(self.realview.ethernet)
+
+    if multi_nic:
+        self.realview.ethernet0 = IGbE_e1000()
+        self.realview.ethernet1 = IGbE_e1000()
+        pci_devices.append(self.realview.ethernet0)
+        pci_devices.append(self.realview.ethernet1)
 
     self.mem_ranges = []
     size_remain = long(Addr(mdesc.mem()))
@@ -434,6 +443,11 @@ def connectX86ClassicSystem(x86_sys, numCPUs):
                   Addr.max)
         ]
 
+    x86_sys.pc.ethernet0.pio = x86_sys.iobus.master
+    x86_sys.pc.ethernet0.dma = x86_sys.iobus.slave 
+    x86_sys.pc.ethernet1.pio = x86_sys.iobus.master
+    x86_sys.pc.ethernet1.dma = x86_sys.iobus.slave
+
     # Create a bridge from the IO bus to the memory bus to allow access to
     # the local APIC (two pages)
     x86_sys.apicbridge = Bridge(delay='50ns')
@@ -491,6 +505,12 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, workload=None, Ruby=False):
 
     # Platform
     self.pc = Pc()
+
+    self.pc.ethernet0 = IGbE_e1000(pci_bus=0, pci_dev=1, pci_func=0,
+            InterruptLine=1, InterruptPin=1)
+
+    self.pc.ethernet1 = IGbE_e1000(pci_bus=0, pci_dev=2, pci_func=0,
+            InterruptLine=1, InterruptPin=1)
 
     # Create and connect the busses required by each memory system
     if Ruby:
@@ -675,7 +695,8 @@ def makeDistRoot(testSystem,
                  sync_start,
                  linkspeed,
                  linkdelay,
-                 dumpfile):
+                 dumpfile,
+                 multi_nic):
     self = Root(full_system = True)
     self.testsys = testSystem
 
@@ -688,12 +709,31 @@ def makeDistRoot(testSystem,
                                    sync_start = sync_start,
                                    sync_repeat = sync_repeat)
 
-    if hasattr(testSystem, 'realview'):
-        self.etherlink.int0 = Parent.testsys.realview.ethernet.interface
-    elif hasattr(testSystem, 'tsunami'):
-        self.etherlink.int0 = Parent.testsys.tsunami.ethernet.interface
+    if multi_nic:
+        self.local_switch = EtherSwitch()
+        self.portlink0 = EtherLink(speed = linkspeed,
+                               delay = "0us")
+
+        self.portlink1 = EtherLink(speed = linkspeed,
+                               delay = "0us")
+        self.portlink0.int0 = self.local_switch.interface[0]
+        self.portlink1.int0 = self.local_switch.interface[1]
+        self.etherlink.int0 = self.local_switch.interface[2]
+        if hasattr(testSystem, 'pc'):
+            self.portlink0.int1 = Parent.testsys.pc.ethernet0.interface  # x86 Implementation #
+            self.portlink1.int1 = Parent.testsys.pc.ethernet1.interface  # x86 Implementation #
+        elif hasattr(testSystem, 'realview'):
+            self.portlink0.int1 = Parent.testsys.realview.ethernet0.interface
+            self.portlink1.int1 = Parent.testsys.realview.ethernet1.interface
+        else:
+            fatal("Don't know how to connect DistEtherLink to this system")
     else:
-        fatal("Don't know how to connect DistEtherLink to this system")
+        if hasattr(testSystem, 'realview'):
+            self.etherlink.int0 = Parent.testsys.realview.ethernet.interface
+        elif hasattr(testSystem, 'tsunami'):
+            self.etherlink.int0 = Parent.testsys.tsunami.ethernet.interface
+        else:
+            fatal("Don't know how to connect DistEtherLink to this system")
 
     if dumpfile:
         self.etherdump = EtherDump(file=dumpfile)
